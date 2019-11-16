@@ -16,6 +16,7 @@ import (
 // todo
 // 1. 路由的实现
 // 2. 希望可以直接从解析出数据
+// 3. 支持 fasthttp 后端
 
 // Easy easy
 type Easy struct {
