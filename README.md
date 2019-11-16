@@ -1,4 +1,4 @@
-# easy
+# Easy
 
 ![](logo.png)
 

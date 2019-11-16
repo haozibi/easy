@@ -53,8 +53,8 @@ func (e *Easy) new(opts ...Option) {
 		MaxHeaderBytes: opt.maxHeaderBytes,
 		Handler:        handlers.RecoveryHandler()(e),
 	}
-	e.Router.MethodNotAllowedHandler = opt.MethodNotAllowedHandler
-	e.Router.NotFoundHandler = opt.NotFoundHandler
+	e.Router.MethodNotAllowedHandler = opt.methodNotAllowedHandler
+	e.Router.NotFoundHandler = opt.notFoundHandler
 }
 
 func (e *Easy) defaultOptions() options {
@@ -121,8 +121,8 @@ type options struct {
 	writeTimeout   time.Duration
 	maxHeaderBytes int
 
-	NotFoundHandler         http.Handler
-	MethodNotAllowedHandler http.Handler
+	notFoundHandler         http.Handler
+	methodNotAllowedHandler http.Handler
 }
 
 // Option option
@@ -160,13 +160,13 @@ func WithMaxHeaderBytes(n int) Option {
 // WithNotFoundHandler set server 404 Handler
 func WithNotFoundHandler(h http.Handler) Option {
 	return optionFunc(func(o *options) {
-		o.NotFoundHandler = h
+		o.notFoundHandler = h
 	})
 }
 
 // WithMethodNotAllowedHandler set server 405 Handler
 func WithMethodNotAllowedHandler(h http.Handler) Option {
 	return optionFunc(func(o *options) {
-		o.MethodNotAllowedHandler = h
+		o.methodNotAllowedHandler = h
 	})
 }
