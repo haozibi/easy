@@ -53,7 +53,9 @@ func TestSingleGroup(t *testing.T) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
+	fmt.Println("===")
 	c <- "bar"
+	// close(c)
 	wg.Wait()
 
 	got := atomic.LoadInt32(&calls)

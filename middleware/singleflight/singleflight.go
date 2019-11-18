@@ -36,6 +36,11 @@ func (c *call) addResponseWriter(w http.ResponseWriter) {
 	c.mu.Unlock()
 }
 
+func (c *call) reset() {
+	c.w = nil
+	c.mw = nil
+}
+
 func (c *call) flush() {
 
 	resp := c.w.Result()
@@ -56,8 +61,10 @@ func (c *call) flush() {
 
 // Group group
 type Group struct {
-	mu sync.Mutex
-	m  map[string]*call
+	mu       sync.Mutex
+	m        map[string]*call
+	callPool *sync.Pool
+	buffPool *sync.Pool
 }
 
 // Do do
@@ -70,14 +77,7 @@ func (g *Group) Do(next http.Handler, opts ...Option) http.Handler {
 			o.apply(&opt)
 		}
 
-		if len(opt.headerName) == 0 ||
-			len(opt.headerValue) == 0 {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if r.Header.Get(opt.headerName) !=
-			opt.headerValue {
+		if !g.isSingleRequest(opt, r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -94,6 +94,20 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 	if g.m == nil {
 		g.m = make(map[string]*call)
 	}
+	if g.callPool == nil {
+		g.callPool = &sync.Pool{
+			New: func() interface{} {
+				return new(call)
+			},
+		}
+	}
+	if g.buffPool == nil {
+		g.buffPool = &sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(make([]byte, 4096))
+			},
+		}
+	}
 	key, err := g.requestKey(r)
 	if err != nil {
 		return err
@@ -109,7 +123,7 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 		return nil
 	}
 
-	c := new(call)
+	c := g.callPool.Get().(*call)
 	c.wg.Add(1)
 	g.m[key] = c
 	c.mw = new(multiWriter)
@@ -127,6 +141,8 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 
 	g.mu.Lock()
 	delete(g.m, key)
+	// c.reset()
+	g.callPool.Put(c)
 	g.mu.Unlock()
 
 	return nil
@@ -157,17 +173,35 @@ func (g *Group) requestKey(r *http.Request) (string, error) {
 	}
 
 	if r.Body != nil {
-		buffer := bytes.NewBuffer(make([]byte, 4096))
+		// buffer := bytes.NewBuffer(make([]byte, 4096))
+		buffer := g.buffPool.Get().(*bytes.Buffer)
+		// 不知为啥，在 Put 前会造成阻塞
+		buffer.Reset()
 		_, err := io.Copy(buffer, r.Body)
 		if err != nil {
+			g.buffPool.Put(buffer)
 			return "", errors.Wrap(err, "get request key")
 		}
 		body = mmd5(buffer.Bytes())
+		g.buffPool.Put(buffer)
 	}
 
 	key = method + path + proto + header + body
 
 	return key, nil
+}
+
+func (g *Group) isSingleRequest(opt options, r *http.Request) bool {
+	if len(opt.headerName) == 0 ||
+		len(opt.headerValue) == 0 {
+		return false
+	}
+
+	if r.Header.Get(opt.headerName) !=
+		opt.headerValue {
+		return false
+	}
+	return true
 }
 
 func mmd5(body []byte) string {
