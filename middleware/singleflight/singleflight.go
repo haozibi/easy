@@ -128,7 +128,9 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 
 	next.ServeHTTP(c.w, r)
 
+	g.mu.Lock()
 	c.flush()
+	g.mu.Unlock()
 	c.wg.Done()
 
 	g.mu.Lock()
