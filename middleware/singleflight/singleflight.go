@@ -13,9 +13,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// 多个相同请求，其中一个访问真正的后端，其他请求等待其完成
-// 反向代理
-
 type call struct {
 	mu sync.Mutex
 	wg sync.WaitGroup
@@ -113,8 +110,6 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 		return err
 	}
 
-	// 只保证在首个请求进行请求时进入的相同请求会被阻塞
-	// 返回相同响应
 	if c, ok := g.m[key]; ok {
 		g.mu.Unlock()
 		// 是否并发安全，遗漏响应
@@ -131,17 +126,14 @@ func (g *Group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 	c.addResponseWriter(w)
 	g.mu.Unlock()
 
-	// 唯一请求转发
-	// todo: 利用 channel 把这段分离，避免耦合
 	next.ServeHTTP(c.w, r)
 
-	// 把请求响应统一复制到所有等待的响应
 	c.flush()
 	c.wg.Done()
 
 	g.mu.Lock()
 	delete(g.m, key)
-	// c.reset()
+	c.reset()
 	g.callPool.Put(c)
 	g.mu.Unlock()
 
