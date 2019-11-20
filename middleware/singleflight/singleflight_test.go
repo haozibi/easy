@@ -15,9 +15,9 @@ import (
 func TestSingleGroup(t *testing.T) {
 
 	var (
-		g           Group
 		calls       int32
 		wg          sync.WaitGroup
+		g           = New()
 		n           = 10
 		c           = make(chan string)
 		t1          = time.Now()
@@ -60,5 +60,5 @@ func TestSingleGroup(t *testing.T) {
 
 	got := atomic.LoadInt32(&calls)
 
-	fmt.Printf("calls: %d,time: %v\n", got, time.Since(t1))
+	fmt.Printf("\ncalls: %d,time: %v\n", got, time.Since(t1))
 }
