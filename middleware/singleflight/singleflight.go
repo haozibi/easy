@@ -110,10 +110,9 @@ type group struct {
 func (g *group) Do(next http.Handler, opts ...Option) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		opt := options{"", ""}
-
+		opt := defaultOptions()
 		for _, o := range opts {
-			o.apply(&opt)
+			o.apply(opt)
 		}
 
 		if !g.isSingleRequest(opt, r) {
@@ -121,16 +120,16 @@ func (g *group) Do(next http.Handler, opts ...Option) http.Handler {
 			return
 		}
 
-		err := g.do(w, r, next)
+		err := g.do(w, r, next, opt.expectHeader...)
 		if err != nil {
 			log.Println("group do error:", err)
 		}
 	})
 }
 
-func (g *group) do(w http.ResponseWriter, r *http.Request, next http.Handler) error {
+func (g *group) do(w http.ResponseWriter, r *http.Request, next http.Handler, exceptHeader ...string) error {
 
-	key, err := g.requestKey(r)
+	key, err := g.requestKey(r, exceptHeader...)
 	if err != nil {
 		return err
 	}
@@ -163,7 +162,7 @@ func (g *group) do(w http.ResponseWriter, r *http.Request, next http.Handler) er
 	return nil
 }
 
-func (g *group) requestKey(r *http.Request) (string, error) {
+func (g *group) requestKey(r *http.Request, exceptHeader ...string) (string, error) {
 
 	var (
 		key    string
@@ -180,6 +179,9 @@ func (g *group) requestKey(r *http.Request) (string, error) {
 
 	headers := map[string][]string(r.Header)
 	for k, v := range headers {
+		if g.isExceptHeader(k, exceptHeader...) {
+			continue
+		}
 		s := ""
 		for _, vv := range v {
 			s += vv
@@ -206,7 +208,16 @@ func (g *group) requestKey(r *http.Request) (string, error) {
 	return key, nil
 }
 
-func (g *group) isSingleRequest(opt options, r *http.Request) bool {
+func (g *group) isExceptHeader(header string, exceptHeader ...string) bool {
+	for _, v := range exceptHeader {
+		if v == header {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *group) isSingleRequest(opt *options, r *http.Request) bool {
 	if len(opt.headerName) == 0 ||
 		len(opt.headerValue) == 0 {
 		return false
@@ -245,7 +256,23 @@ func WithHeader(name, value string) Option {
 	})
 }
 
+// WithExceptHeader 排除 header 列表，例如每个请求的 call-id
+func WithExceptHeader(header ...string) Option {
+	return optionFunc(func(o *options) {
+		t := make([]string, len(header))
+		for i := 0; i < len(header); i++ {
+			t[i] = http.CanonicalHeaderKey(header[i])
+		}
+		o.expectHeader = t
+	})
+}
+
 type options struct {
-	headerName  string
-	headerValue string
+	headerName   string
+	headerValue  string
+	expectHeader []string
+}
+
+func defaultOptions() *options {
+	return &options{"", "", nil}
 }
